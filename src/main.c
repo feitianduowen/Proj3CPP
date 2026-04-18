@@ -31,6 +31,12 @@ int matmul_plain(int N, const struct Matrix *A, const struct Matrix *B, struct M
 }
 int matmul_improved(int N, const struct Matrix *A, const struct Matrix *B, struct Matrix *C)
 {
+    if (N>10000)
+    {
+        printf("Matrix size N = %d is too large for in-memory multiplication.\n", N);
+        return -1;
+    }
+    
     if (!A || !B || !C || N <= 0 ||
         A->cols != N || A->rows != N ||
         B->cols != N || B->rows != N ||

@@ -17,6 +17,11 @@ long long get_time_ns()
 
 struct Matrix *create_matrix(size_t rows, size_t cols)
 {
+    if (rows>10000||cols>10000)
+    {
+        printf("Matrix size N = %d is too large for in-memory multiplication.\n", rows);
+        return NULL;
+    }
     struct Matrix *mat = (struct Matrix *)malloc(sizeof(struct Matrix));
     if (!mat)
         return NULL;
@@ -156,13 +161,16 @@ void test(int sizeN, int cir0, int cir1, int cir2, int outerCir, struct TestResu
 
     if (cir0 != 0)
         time_plain /= outerCir;
+    else
+        time_plain = 0.0;
     time_improved /= outerCir;
     time_openblas /= outerCir;
 
     if (res)
     {
         res->size = sizeN;
-        if (cir0 != 0)res->time_plain = time_plain;
+        if (cir0 != 0) res->time_plain = time_plain;
+        else res->time_plain = 0.0;
         res->time_improved = time_improved;
         res->time_openblas = time_openblas;
     }
@@ -231,11 +239,11 @@ int main()
     int res_idx = 0;
 
     test(16, 0, 10, 10, 1000, &results[res_idx++]);
-    test(128, 0, 10, 10, 1000, &results[res_idx++]);
-    test(400, 0, 10, 10, 1000, &results[res_idx++]);
-    test(800, 0, 10, 10, 1000, &results[res_idx++]);
-    test(1024, 0, 1, 1, 5, &results[res_idx++]);
-    test(8192, 0, 1, 1, 5, &results[res_idx++]);
+    // test(128, 0, 10, 10, 1000, &results[res_idx++]);
+    // test(400, 0, 10, 10, 1000, &results[res_idx++]);
+    // test(800, 0, 10, 10, 1000, &results[res_idx++]);
+    // test(1024, 0, 1, 1, 5, &results[res_idx++]);
+    // test(8192, 0, 1, 1, 5, &results[res_idx++]);
     test(64000, 0, 1, 1, 3, &results[res_idx++]);
 
     FILE *fp = fopen("result.csv", "w");
