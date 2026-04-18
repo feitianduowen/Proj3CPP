@@ -1,8 +1,83 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <immintrin.h>
-#include <omp.h>
 #include "main.h"
+
+struct Matrix *create_matrix(size_t rows, size_t cols)
+{
+    if (rows>10000||cols>10000)
+    {
+        printf("Matrix size N = %zu is too large for in-memory handling.\n", rows);
+        return NULL;
+    }
+    struct Matrix *mat = (struct Matrix *)malloc(sizeof(struct Matrix));
+    if (!mat) return NULL;
+    mat->rows = rows;
+    mat->cols = cols;
+    mat->data = (float *)malloc(rows * cols * sizeof(float));
+    if (!mat->data)
+    {
+        free(mat);
+        return NULL;
+    }
+    return mat;
+}
+
+void free_matrix(struct Matrix *mat)
+{
+    if (mat)
+    {
+        if (mat->data) free(mat->data);
+        free(mat);
+    }
+}
+
+void randomize_matrix(struct Matrix *mat)
+{
+    if (!mat || !mat->data) return;
+    size_t count = mat->rows * mat->cols;
+    for (size_t i = 0; i < count; i++)
+        mat->data[i] = (float)rand() / RAND_MAX;
+}
+
+void clear_matrix(struct Matrix *mat)
+{
+    if (!mat || !mat->data) return;
+    size_t count = mat->rows * mat->cols;
+    for (size_t i = 0; i < count; i++)
+        mat->data[i] = 0.0f;
+}
+
+int compare_matrices(struct Matrix *mat1, struct Matrix *mat2, float epsilon)
+{
+    if (!mat1 || !mat2 || mat1->rows != mat2->rows || mat1->cols != mat2->cols) return 0;
+    size_t count = mat1->rows * mat1->cols;
+    int passed = 1;
+    float max_err = 0.0f,diff=0.0f;
+    
+    for (size_t i = 0; i < count; i++)
+    {
+        diff = (float)fabs(mat1->data[i] - mat2->data[i]);
+        if (diff > max_err)
+            max_err = diff;
+        if (diff > epsilon) 
+        {
+            if (passed) {
+                printf("  Mismatch at index %zu: mat1=%.4f vs mat2=%.4f\n", i, mat1->data[i], mat2->data[i]);
+            }
+            passed = 0;
+        }
+    }
+    if (passed) {
+        printf("  Max error: %e\n", max_err);
+    }
+    return passed;
+}
+
+long long get_time_ns()
+{
+    struct timespec ts;
+    // C11 标准时间函数，能获取纳秒精度（在 GCC/MinGW 下完美支持）
+    timespec_get(&ts, TIME_UTC);
+    return (long long)ts.tv_sec * 1000000000LL + ts.tv_nsec;
+}
 
 int matmul_plain(int N, const struct Matrix *A, const struct Matrix *B, struct Matrix *C)
 {
@@ -128,7 +203,7 @@ int matmul_improved(int N, const struct Matrix *A, const struct Matrix *B, struc
 
     return 0;
 }
-int matmul_openblas(int N, const struct Matrix *A, const struct Matrix *B, struct Matrix *C)
+int matmul_openblas(size_t N, const struct Matrix *A, const struct Matrix *B, struct Matrix *C)
 {
     if (!A || !B || !C || N <= 0)
         return -1;
@@ -138,5 +213,15 @@ int matmul_openblas(int N, const struct Matrix *A, const struct Matrix *B, struc
                 1.0f, A->data, N,
                 B->data, N,
                 0.0f, C->data, N);
+    return 0;
+}
+
+int matmul_openblas_accumulate(int N, const struct Matrix *A, const struct Matrix *B, struct Matrix const *C)
+{
+    cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
+                N, N, N,
+                1.0f, A->data, N,
+                B->data, N,
+                1.0f, C->data, N); // <--- 这里改成 1.0f 就自带累加了！
     return 0;
 }

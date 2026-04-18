@@ -1,89 +1,9 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <time.h>
-#include <math.h>
 #include "main.h"
 
 int sizes[] = {16, 128, 400, 800, 1024, 8192, 64000};
 int num_sizes = sizeof(sizes) / sizeof(sizes[0]);
 
-long long get_time_ns()
-{
-    struct timespec ts;
-    // C11 标准时间函数，能获取纳秒精度（在 GCC/MinGW 下完美支持）
-    timespec_get(&ts, TIME_UTC);
-    return (long long)ts.tv_sec * 1000000000LL + ts.tv_nsec;
-}
-
-struct Matrix *create_matrix(size_t rows, size_t cols)
-{
-    if (rows>10000||cols>10000)
-    {
-        printf("Matrix size N = %d is too large for in-memory multiplication.\n", rows);
-        return NULL;
-    }
-    struct Matrix *mat = (struct Matrix *)malloc(sizeof(struct Matrix));
-    if (!mat)
-        return NULL;
-    mat->rows = rows;
-    mat->cols = cols;
-    mat->data = (float *)malloc(rows * cols * sizeof(float));
-    if (!mat->data)
-    {
-        free(mat);
-        return NULL;
-    }
-    return mat;
-}
-
-void free_matrix(struct Matrix *mat)
-{
-    if (mat)
-    {
-        if (mat->data)
-            free(mat->data);
-        free(mat);
-    }
-}
-
-void randomize_matrix(struct Matrix *mat)
-{
-    if (!mat || !mat->data)
-        return;
-    size_t count = mat->rows * mat->cols;
-    for (size_t i = 0; i < count; i++)
-    {
-        mat->data[i] = (float)rand() / RAND_MAX;
-    }
-}
-
-void clear_matrix(struct Matrix *mat)
-{
-    if (!mat || !mat->data)
-        return;
-    size_t count = mat->rows * mat->cols;
-    for (size_t i = 0; i < count; i++)
-    {
-        mat->data[i] = 0.0f;
-    }
-}
-
-int compare_matrices(struct Matrix *mat1, struct Matrix *mat2)
-{
-    if (!mat1 || !mat2 || mat1->rows != mat2->rows || mat1->cols != mat2->cols)
-        return 0;
-    size_t count = mat1->rows * mat1->cols;
-    for (size_t i = 0; i < count; i++)
-    {
-        if (fabs(mat1->data[i] - mat2->data[i]) > 1e-3)
-        {
-            return 0; // differ
-        }
-    }
-    return 1; // match
-}
-
-double run_test(int N, int innerCir, const struct Matrix *A, const struct Matrix *B, struct Matrix *C, const int type)
+long long run_test(int N, int innerCir, const struct Matrix *A, const struct Matrix *B, struct Matrix *C, int type)
 {
     if (!A || !B || !C)
     {
@@ -93,8 +13,7 @@ double run_test(int N, int innerCir, const struct Matrix *A, const struct Matrix
 
     clear_matrix(C);
 
-    long long time_cum = 0, start = 0, end = 0;
-    double time_avg = 0.0;
+    long long time_min = LONG_LONG_MAX, start = 0, end = 0, duration = 0;
     switch (type)
     {
     case 0:
@@ -103,9 +22,9 @@ double run_test(int N, int innerCir, const struct Matrix *A, const struct Matrix
             start = get_time_ns();
             matmul_plain(N, A, B, C);
             end = get_time_ns();
-            time_cum += (end - start);
+            duration = end - start;
+            if (duration < time_min) time_min = duration;
         }
-
         break;
     case 1:
         for (size_t i = 0; i < innerCir; i++)
@@ -113,9 +32,9 @@ double run_test(int N, int innerCir, const struct Matrix *A, const struct Matrix
             start = get_time_ns();
             matmul_improved(N, A, B, C);
             end = get_time_ns();
-            time_cum += (end - start);
+            duration = end - start;
+            if (duration < time_min) time_min = duration;
         }
-
         break;
     default:
         for (size_t i = 0; i < innerCir; i++)
@@ -123,14 +42,13 @@ double run_test(int N, int innerCir, const struct Matrix *A, const struct Matrix
             start = get_time_ns();
             matmul_openblas(N, A, B, C);
             end = get_time_ns();
-            time_cum += (end - start);
+            duration = end - start;
+            if (duration < time_min) time_min = duration;
         }
         break;
     }
 
-    time_avg = (double)time_cum / innerCir;
-
-    return time_avg;
+    return time_min;
 }
 
 void test(int sizeN, int cir0, int cir1, int cir2, int outerCir, struct TestResult *res)
@@ -147,17 +65,19 @@ void test(int sizeN, int cir0, int cir1, int cir2, int outerCir, struct TestResu
     // 注意：每次测试前重新置零，否则之前的计算结果会留在 C 里
     // 下面调用的 run_test() 内部在开头已经固定调用了 clear_matrix(C);
     // 因此这里外层的 clear_matrix(C) 是多余的，但保留也不会错。
-    
+
     double time_plain = 0.0, time_improved = 0.0, time_openblas = 0.0;
     for (size_t i = 0; i < outerCir; i++)
     {
         randomize_matrix(A);
         randomize_matrix(B);
-        
+
         time_plain += run_test(sizeN, cir0, A, B, C, 0);
         time_improved += run_test(sizeN, cir1, A, B, C, 1);
         time_openblas += run_test(sizeN, cir2, A, B, C, 2);
+        if ((int)(i*100000/outerCir)%2000 == 0) printf(".");
     }
+    printf("\n");
 
     if (cir0 != 0)
         time_plain /= outerCir;
@@ -208,7 +128,7 @@ int check(int sizeN, int cir)
         matmul_plain(sizeN, A, B, C1);
         matmul_openblas(sizeN, A, B, C2);
 
-        result = compare_matrices(C1, C2);
+        result = compare_matrices(C1, C2, 1e-3f);
         if (!result)
         {
             printf("Result mismatch for N = %d\n", sizeN);
@@ -238,15 +158,15 @@ int main()
     struct TestResult results[7];
     int res_idx = 0;
 
-    test(16, 0, 10, 10, 1000, &results[res_idx++]);
-    // test(128, 0, 10, 10, 1000, &results[res_idx++]);
-    // test(400, 0, 10, 10, 1000, &results[res_idx++]);
-    // test(800, 0, 10, 10, 1000, &results[res_idx++]);
-    // test(1024, 0, 1, 1, 5, &results[res_idx++]);
-    // test(8192, 0, 1, 1, 5, &results[res_idx++]);
-    test(64000, 0, 1, 1, 3, &results[res_idx++]);
+    test(16, 10, 100, 100, 10000, &results[res_idx++]);
+    test(128, 10, 100, 100, 1000, &results[res_idx++]);
+    test(400, 1, 10, 10, 1000, &results[res_idx++]);
+    test(800, 1, 100, 100, 100, &results[res_idx++]);
+    test(1024, 1, 10, 10, 10, &results[res_idx++]);
+    test(8192, 1, 5, 5, 5, &results[res_idx++]);
+    //test(64000, 0, 1, 1, 1, &results[res_idx++]);
 
-    FILE *fp = fopen("result.csv", "w");
+    FILE *fp = fopen("../out/result.csv", "w");
     if (fp)
     {
         fprintf(fp, "Size,Plain(ns),Improved(ns),OpenBLAS(ns)\n");
@@ -255,11 +175,11 @@ int main()
             fprintf(fp, "%d,%.2f,%.2f,%.2f\n", results[i].size, results[i].time_plain, results[i].time_improved, results[i].time_openblas);
         }
         fclose(fp);
-        printf("\n==> Results successfully saved to result.csv\n");
+        printf("\n==> Results successfully saved to ../out/result.csv\n");
     }
     else
     {
-        printf("\n==> Failed to open result.csv for writing.\n");
+        printf("\n==> Failed to open ../out/result.csv for writing.\n");
     }
 
     return 0;
