@@ -8,6 +8,7 @@
 #include <math.h>
 #include <immintrin.h>
 #include <omp.h>
+#include <windows.h>
 
 struct Matrix
 {
@@ -26,6 +27,7 @@ struct TestResult {
 long long get_time_ns();
 
 int matmul_plain(int N, const struct Matrix *A, const struct Matrix *B, struct Matrix *C);
+int matmul_ikj(int N, const struct Matrix *A, const struct Matrix *B, struct Matrix *C);
 int matmul_improved(int N, const struct Matrix *A, const struct Matrix *B, struct Matrix *C);
 int matmul_openblas(size_t N, const struct Matrix *A, const struct Matrix *B, struct Matrix *C);
 int matmul_openblas_accumulate(int N, const struct Matrix *A, const struct Matrix *B, struct Matrix const*C);

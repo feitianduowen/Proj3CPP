@@ -66,7 +66,7 @@ int compare_matrices(struct Matrix *mat1, struct Matrix *mat2, float epsilon)
         }
     }
     if (passed) {
-        printf("  Max error: %e\n", max_err);
+        //printf("  Max error: %e\n", max_err);
     }
     return passed;
 }
@@ -89,7 +89,8 @@ int matmul_plain(int N, const struct Matrix *A, const struct Matrix *B, struct M
     {
         return -1; // Invalid input
     }
-
+    clear_matrix(C);
+    
     for (size_t i = 0; i < N; i++)
     {
         for (size_t j = 0; j < N; j++)
@@ -104,6 +105,33 @@ int matmul_plain(int N, const struct Matrix *A, const struct Matrix *B, struct M
     }
     return 0;
 }
+
+int matmul_ikj(int N, const struct Matrix *A, const struct Matrix *B, struct Matrix *C)
+{
+    if (!A || !B || !C || N <= 0 ||
+        A->cols != N || A->rows != N ||
+        B->cols != N || B->rows != N ||
+        C->cols != N || C->rows != N ||
+        !A->data || !B->data || !C->data)
+    {
+        return -1; // Invalid input
+    }
+    
+    clear_matrix(C);
+    
+    for (size_t i = 0; i < N; i++)
+    {
+        for (size_t k = 0; k < N; k++)
+        {
+            for (size_t j = 0; j < N; j++)
+            {
+                C->data[i * N + j] += A->data[i * N + k] * B->data[k * N + j];
+            }
+        }
+    }
+    return 0;
+}
+
 int matmul_improved(int N, const struct Matrix *A, const struct Matrix *B, struct Matrix *C)
 {
     if (N>10000)
