@@ -29,7 +29,7 @@ void free_matrix(struct Matrix *mat)
     }
 }
 
-void randomize_matrix(struct Matrix *mat)
+void randomize_matrix(struct Matrix const *mat)
 {
     if (!mat || !mat->data) return;
     size_t count = mat->rows * mat->cols;
@@ -37,7 +37,7 @@ void randomize_matrix(struct Matrix *mat)
         mat->data[i] = (float)rand() / RAND_MAX;
 }
 
-void clear_matrix(struct Matrix *mat)
+void clear_matrix(struct Matrix const *mat)
 {
     if (!mat || !mat->data) return;
     size_t count = mat->rows * mat->cols;
@@ -45,7 +45,7 @@ void clear_matrix(struct Matrix *mat)
         mat->data[i] = 0.0f;
 }
 
-int compare_matrices(struct Matrix *mat1, struct Matrix *mat2, float epsilon)
+int compare_matrices(const struct Matrix *mat1, const struct Matrix *mat2, float epsilon)
 {
     if (!mat1 || !mat2 || mat1->rows != mat2->rows || mat1->cols != mat2->cols) return 0;
     size_t count = mat1->rows * mat1->cols;
@@ -79,7 +79,7 @@ long long get_time_ns()
     return (long long)ts.tv_sec * 1000000000LL + ts.tv_nsec;
 }
 
-int matmul_plain(int N, const struct Matrix *A, const struct Matrix *B, struct Matrix *C)
+int matmul_plain(size_t N, const struct Matrix *A, const struct Matrix *B, struct Matrix const *C)
 {
     if (!A || !B || !C || N <= 0 ||
         A->cols != N || A->rows != N ||
@@ -106,7 +106,7 @@ int matmul_plain(int N, const struct Matrix *A, const struct Matrix *B, struct M
     return 0;
 }
 
-int matmul_ikj(int N, const struct Matrix *A, const struct Matrix *B, struct Matrix *C)
+int matmul_ikj(size_t N, const struct Matrix *A, const struct Matrix *B, struct Matrix const *C)
 {
     if (!A || !B || !C || N <= 0 ||
         A->cols != N || A->rows != N ||
@@ -132,11 +132,11 @@ int matmul_ikj(int N, const struct Matrix *A, const struct Matrix *B, struct Mat
     return 0;
 }
 
-int matmul_improved(int N, const struct Matrix *A, const struct Matrix *B, struct Matrix *C)
+int matmul_improved(size_t N, const struct Matrix *A, const struct Matrix *B, struct Matrix const *C)
 {
     if (N>10000)
     {
-        printf("Matrix size N = %d is too large for in-memory multiplication.\n", N);
+        printf("Matrix size N = %zu is too large for in-memory multiplication.\n", N);
         return -1;
     }
     
@@ -148,6 +148,13 @@ int matmul_improved(int N, const struct Matrix *A, const struct Matrix *B, struc
     {
         return -1; // Invalid input
     }
+    
+    // Fallback for non-multiples of 8 to avoid SIMD out-of-bounds heap corruption
+    if (N % 8 != 0) {
+        return matmul_ikj(N, A, B, C);
+    }
+
+    clear_matrix(C);
 
     // 针对小矩阵 (N <= 128) 的特化全速 Fast Path
     // 小矩阵可以完全装入 L1/L2 Cache，分块和 OpenMP 的线程唤醒开销反而会成为累赘
@@ -231,7 +238,8 @@ int matmul_improved(int N, const struct Matrix *A, const struct Matrix *B, struc
 
     return 0;
 }
-int matmul_openblas(size_t N, const struct Matrix *A, const struct Matrix *B, struct Matrix *C)
+
+int matmul_openblas(size_t N, const struct Matrix *A, const struct Matrix *B, struct Matrix const *C)
 {
     if (!A || !B || !C || N <= 0)
         return -1;
@@ -244,7 +252,7 @@ int matmul_openblas(size_t N, const struct Matrix *A, const struct Matrix *B, st
     return 0;
 }
 
-int matmul_openblas_accumulate(int N, const struct Matrix *A, const struct Matrix *B, struct Matrix const *C)
+int matmul_openblas_accumulate(size_t N, const struct Matrix *A, const struct Matrix *B, struct Matrix const *C)
 {
     cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
                 N, N, N,
@@ -252,4 +260,245 @@ int matmul_openblas_accumulate(int N, const struct Matrix *A, const struct Matri
                 B->data, N,
                 1.0f, C->data, N); // <--- 这里改成 1.0f 就自带累加了！
     return 0;
+}
+
+int matmul_tp(size_t N, const struct Matrix *A, const struct Matrix *B, struct Matrix const *C)
+{
+    if (N > 10000)
+    {
+        printf("Matrix size N = %zu is too large for in-memory multiplication.\n", N);
+        return -1;
+    }
+
+    if (!A || !B || !C || N <= 0 ||
+        A->cols != N || A->rows != N ||
+        B->cols != N || B->rows != N ||
+        C->cols != N || C->rows != N ||
+        !A->data || !B->data || !C->data)
+    {
+        return -1; // Invalid input
+    }
+    
+    // Fallback for non-multiples of 8 to avoid SIMD out-of-bounds heap corruption
+    if (N % 8 != 0) {
+        return matmul_ikj(N, A, B, C);
+    }
+    
+    clear_matrix(C);
+
+    // 针对小矩阵 (N <= 128) 的特化全速 Fast Path
+    // 引入 i-k-j 优化
+    if (N <= 128)
+    {
+        for (int i = 0; i < N; i += 4)
+        {
+            for (int j = 0; j < N; j += 8)
+            {
+                __m256 c0 = _mm256_loadu_ps(&C->data[(i + 0) * N + j]);
+                __m256 c1 = _mm256_loadu_ps(&C->data[(i + 1) * N + j]);
+                __m256 c2 = _mm256_loadu_ps(&C->data[(i + 2) * N + j]);
+                __m256 c3 = _mm256_loadu_ps(&C->data[(i + 3) * N + j]);
+
+                for (int k = 0; k < N; k++)
+                {
+                    // 将 A 提取到外层，避免在 j 循环中重复 load
+                    __m256 a0 = _mm256_set1_ps(A->data[(i + 0) * N + k]);
+                    __m256 a1 = _mm256_set1_ps(A->data[(i + 1) * N + k]);
+                    __m256 a2 = _mm256_set1_ps(A->data[(i + 2) * N + k]);
+                    __m256 a3 = _mm256_set1_ps(A->data[(i + 3) * N + k]);
+
+                    // 此时 B 的访问完全连续
+                    __m256 b = _mm256_loadu_ps(&B->data[k * N + j]);
+
+                    // 分别与 A 的四行元素相乘，并累加到 C
+                    c0 = _mm256_add_ps(c0, _mm256_mul_ps(a0, b));
+                    c1 = _mm256_add_ps(c1, _mm256_mul_ps(a1, b));
+                    c2 = _mm256_add_ps(c2, _mm256_mul_ps(a2, b));
+                    c3 = _mm256_add_ps(c3, _mm256_mul_ps(a3, b));
+                }
+                
+                _mm256_storeu_ps(&C->data[(i + 0) * N + j], c0);
+                _mm256_storeu_ps(&C->data[(i + 1) * N + j], c1);
+                _mm256_storeu_ps(&C->data[(i + 2) * N + j], c2);
+                _mm256_storeu_ps(&C->data[(i + 3) * N + j], c3);
+            }
+        }
+        return 0;
+    }
+
+    // 设置缓存分块大小 (Tile Size/Block Size)
+    const int BLOCK = 128;
+
+    // 外层并行分配：因为是对 C 矩阵的输出区块划分，所以必须保留 i_b 和 j_b 作为外层
+#pragma omp parallel for collapse(2)
+    for (int i_b = 0; i_b < N; i_b += BLOCK)
+    {
+        for (int j_b = 0; j_b < N; j_b += BLOCK)
+        {
+            for (int k_b = 0; k_b < N; k_b += BLOCK)
+            {
+                int i_max = (i_b + BLOCK < N) ? i_b + BLOCK : N;
+                int j_max = (j_b + BLOCK < N) ? j_b + BLOCK : N;
+                int k_max = (k_b + BLOCK < N) ? k_b + BLOCK : N;
+
+                // 寄存器分块
+                for (int i = i_b; i < i_max; i += 4)
+                {
+                    for (int j = j_b; j < j_max; j += 8)
+                    {
+                        __m256 c0 = _mm256_loadu_ps(&C->data[(i + 0) * N + j]);
+                        __m256 c1 = _mm256_loadu_ps(&C->data[(i + 1) * N + j]);
+                        __m256 c2 = _mm256_loadu_ps(&C->data[(i + 2) * N + j]);
+                        __m256 c3 = _mm256_loadu_ps(&C->data[(i + 3) * N + j]);
+
+                        // 核心修改：内层循环顺序保持 k -> j 已经被外层 j 给包裹了，所以只能放里面让C累加
+                        for (int k = k_b; k < k_max; k++)
+                        {
+                            // 预先准备好当前 4 行在第 k 列的 A 元素标量向量
+                            __m256 a0 = _mm256_set1_ps(A->data[(i + 0) * N + k]);
+                            __m256 a1 = _mm256_set1_ps(A->data[(i + 1) * N + k]);
+                            __m256 a2 = _mm256_set1_ps(A->data[(i + 2) * N + k]);
+                            __m256 a3 = _mm256_set1_ps(A->data[(i + 3) * N + k]);
+
+                            // 此处的 B 连续加载将极大提高 L1/L2 Cache 吞吐量
+                            __m256 b = _mm256_loadu_ps(&B->data[k * N + j]);
+
+                            c0 = _mm256_add_ps(c0, _mm256_mul_ps(a0, b));
+                            c1 = _mm256_add_ps(c1, _mm256_mul_ps(a1, b));
+                            c2 = _mm256_add_ps(c2, _mm256_mul_ps(a2, b));
+                            c3 = _mm256_add_ps(c3, _mm256_mul_ps(a3, b));
+                        }
+                        _mm256_storeu_ps(&C->data[(i + 0) * N + j], c0);
+                        _mm256_storeu_ps(&C->data[(i + 1) * N + j], c1);
+                        _mm256_storeu_ps(&C->data[(i + 2) * N + j], c2);
+                        _mm256_storeu_ps(&C->data[(i + 3) * N + j], c3);
+                    }
+                }
+            }
+        }
+    }
+
+    return 0;
+}
+
+long long test_outer(size_t n, size_t innerCir, size_t outerCir,int type)
+{
+    long long res=LONG_LONG_MAX,tp=0;
+    struct Matrix *A = create_matrix(n, n);
+    struct Matrix *C = create_matrix(n, n);
+
+    for (size_t i = 0; i < outerCir; i++)
+    {
+        clear_matrix(A);
+        randomize_matrix(A);
+        clear_matrix(C);
+        tp = test_inner(n, innerCir, type, A, C);
+
+        if (tp == -1) {
+            printf("Test failed for N = %zu in outer loop %zu\n", n, i);
+            free_matrix(A);
+            free_matrix(C);
+            return -1;
+        }
+        if (tp<res) res=tp;
+
+    }
+    free_matrix(A);
+    free_matrix(C);
+
+    return res;
+}
+
+long long test_inner(size_t n, size_t innerCir, int type, const struct Matrix *A, struct Matrix const *C) {
+    long long time_res = LONG_LONG_MAX, start = 0, end = 0;
+    if (!A ||!C)
+    {
+        printf("Memory allocation failed for N = %zu\n", n);
+        return -1;
+    }
+
+        for (size_t j = 0; j < innerCir; j++)
+        {
+            switch (type) {
+                case 0:
+                    start = get_time_ns();
+                    matmul_ikj(n, A, A, C);
+                    end = get_time_ns();
+                    break;
+                case 1:
+                    start = get_time_ns();
+                    matmul_improved(n, A, A, C);
+                    end = get_time_ns();
+                    break;
+                case 2:
+                    start = get_time_ns();
+                    matmul_openblas(n, A, A, C);
+                    end = get_time_ns();
+                    break;
+                case 3:
+                    start = get_time_ns();
+                    matmul_tp(n, A, A, C);
+                    end = get_time_ns();
+                default:
+                    start = get_time_ns();
+                    matmul_plain(n, A, A, C);
+                    end = get_time_ns();
+                    break;
+            }
+            if (end - start < time_res)
+                time_res = end - start;
+        }
+    return time_res;
+}
+
+int check_result(size_t sizeN, size_t cir,int type,float epsilon)
+{
+    printf("Checking correctness for size N = %zu with %zu iterations...\n", sizeN, cir);
+    struct Matrix *A = create_matrix(sizeN, sizeN);
+    struct Matrix *B = create_matrix(sizeN, sizeN);
+    struct Matrix *C1 = create_matrix(sizeN, sizeN);
+    struct Matrix *C2 = create_matrix(sizeN, sizeN);
+    int result = 0;
+    if (!A || !B || !C1 || !C2)
+    {
+        printf("Memory allocation failed for check test\n");
+        free_matrix(A);
+        free_matrix(B);
+        free_matrix(C1);
+        free_matrix(C2);
+        return -1;
+    }
+    for (size_t i = 0; i < cir; i++)
+    {
+
+        randomize_matrix(A);
+        randomize_matrix(B);
+
+        matmul_plain(sizeN, A, B, C1);
+        switch (type) {
+            case 0:
+                matmul_ikj(sizeN, A, B, C2);
+                break;
+            case 1:
+                matmul_improved(sizeN, A, B, C2);
+                break;
+            default:
+                matmul_improved(sizeN, A, B, C2);
+
+        }
+
+        result = compare_matrices(C1, C2, epsilon);
+        if (!result)
+        {
+            printf("Result mismatch for N = %zu\n", sizeN);
+            break;
+        }
+    }
+
+    free_matrix(A);
+    free_matrix(B);
+    free_matrix(C1);
+    free_matrix(C2);
+    printf("Check for N = %zu %s\n", sizeN, result ? "PASSED" : "FAILED");
+    return result;
 }
