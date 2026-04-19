@@ -22,9 +22,39 @@ struct Matrix *create_matrix(size_t rows, size_t cols)
 
 void free_matrix(struct Matrix *mat)
 {
+
     if (mat)
     {
         if (mat->data) free(mat->data);
+        free(mat);
+    }
+}
+
+struct Matrix *create_matrix_aligned(size_t rows, size_t cols)
+{
+    if (rows>10000||cols>10000)
+    {
+        printf("Matrix size N = %zu is too large for in-memory handling.\n", rows);
+        return NULL;
+    }
+    struct Matrix *mat = (struct Matrix *)malloc(sizeof(struct Matrix));
+    if (!mat) return NULL;
+    mat->rows = rows;
+    mat->cols = cols;
+    mat->data = (float *)_aligned_malloc(rows * cols * sizeof(float), 32);
+    if (!mat->data)
+    {
+        free(mat);
+        return NULL;
+    }
+    return mat;
+}
+
+void free_matrix_aligned(struct Matrix *mat)
+{
+    if (mat)
+    {
+        if (mat->data) _aligned_free(mat->data);
         free(mat);
     }
 }
@@ -239,6 +269,103 @@ int matmul_improved(size_t N, const struct Matrix *A, const struct Matrix *B, st
     return 0;
 }
 
+int matmul_improved_aligned(size_t N, const struct Matrix *A, const struct Matrix *B, struct Matrix const *C)
+{
+    if (N>10000)
+    {
+        printf("Matrix size N = %zu is too large for in-memory multiplication.\n", N);
+        return -1;
+    }
+    
+    if (!A || !B || !C || N <= 0 ||
+        A->cols != N || A->rows != N ||
+        B->cols != N || B->rows != N ||
+        C->cols != N || C->rows != N ||
+        !A->data || !B->data || !C->data)
+    {
+        return -1; // Invalid input
+    }
+    
+    // Fallback for non-multiples of 8 to avoid SIMD out-of-bounds
+    if (N % 8 != 0) {
+        return matmul_ikj(N, A, B, C);
+    }
+
+    clear_matrix(C);
+
+    if (N <= 128)
+    {
+        for (int i = 0; i < N; i += 4)
+        {
+            for (int j = 0; j < N; j += 8)
+            {
+                __m256 c0 = _mm256_load_ps(&C->data[(i + 0) * N + j]);
+                __m256 c1 = _mm256_load_ps(&C->data[(i + 1) * N + j]);
+                __m256 c2 = _mm256_load_ps(&C->data[(i + 2) * N + j]);
+                __m256 c3 = _mm256_load_ps(&C->data[(i + 3) * N + j]);
+
+                for (int k = 0; k < N; k++)
+                {
+                    __m256 b = _mm256_load_ps(&B->data[k * N + j]);
+                    c0 = _mm256_add_ps(c0, _mm256_mul_ps(_mm256_set1_ps(A->data[(i + 0) * N + k]), b));
+                    c1 = _mm256_add_ps(c1, _mm256_mul_ps(_mm256_set1_ps(A->data[(i + 1) * N + k]), b));
+                    c2 = _mm256_add_ps(c2, _mm256_mul_ps(_mm256_set1_ps(A->data[(i + 2) * N + k]), b));
+                    c3 = _mm256_add_ps(c3, _mm256_mul_ps(_mm256_set1_ps(A->data[(i + 3) * N + k]), b));
+                }
+
+                _mm256_store_ps(&C->data[(i + 0) * N + j], c0);
+                _mm256_store_ps(&C->data[(i + 1) * N + j], c1);
+                _mm256_store_ps(&C->data[(i + 2) * N + j], c2);
+                _mm256_store_ps(&C->data[(i + 3) * N + j], c3);
+            }
+        }
+        return 0;
+    }
+
+    const int BLOCK = 128;
+
+#pragma omp parallel for collapse(2)
+    for (int i_b = 0; i_b < N; i_b += BLOCK)
+    {
+        for (int j_b = 0; j_b < N; j_b += BLOCK)
+        {
+            for (int k_b = 0; k_b < N; k_b += BLOCK)
+            {
+                int i_max = (i_b + BLOCK < N) ? i_b + BLOCK : N;
+                int j_max = (j_b + BLOCK < N) ? j_b + BLOCK : N;
+                int k_max = (k_b + BLOCK < N) ? k_b + BLOCK : N;
+
+                for (int i = i_b; i < i_max; i += 4)
+                {
+                    for (int j = j_b; j < j_max; j += 8)
+                    {
+                        __m256 c0 = _mm256_load_ps(&C->data[(i + 0) * N + j]);
+                        __m256 c1 = _mm256_load_ps(&C->data[(i + 1) * N + j]);
+                        __m256 c2 = _mm256_load_ps(&C->data[(i + 2) * N + j]);
+                        __m256 c3 = _mm256_load_ps(&C->data[(i + 3) * N + j]);
+
+                        for (int k = k_b; k < k_max; k++)
+                        {
+                            __m256 b = _mm256_load_ps(&B->data[k * N + j]);
+                            c0 = _mm256_add_ps(c0, _mm256_mul_ps(_mm256_set1_ps(A->data[(i + 0) * N + k]), b));
+                            c1 = _mm256_add_ps(c1, _mm256_mul_ps(_mm256_set1_ps(A->data[(i + 1) * N + k]), b));
+                            c2 = _mm256_add_ps(c2, _mm256_mul_ps(_mm256_set1_ps(A->data[(i + 2) * N + k]), b));
+                            c3 = _mm256_add_ps(c3, _mm256_mul_ps(_mm256_set1_ps(A->data[(i + 3) * N + k]), b));
+                        }
+
+                        _mm256_store_ps(&C->data[(i + 0) * N + j], c0);
+                        _mm256_store_ps(&C->data[(i + 1) * N + j], c1);
+                        _mm256_store_ps(&C->data[(i + 2) * N + j], c2);
+                        _mm256_store_ps(&C->data[(i + 3) * N + j], c3);
+                    }
+                }
+            }
+        }
+    }
+
+    return 0;
+}
+
 int matmul_openblas(size_t N, const struct Matrix *A, const struct Matrix *B, struct Matrix const *C)
 {
     if (!A || !B || !C || N <= 0)
@@ -384,8 +511,15 @@ int matmul_tp(size_t N, const struct Matrix *A, const struct Matrix *B, struct M
 long long test_outer(size_t n, size_t innerCir, size_t outerCir,int type)
 {
     long long res=LONG_LONG_MAX,tp=0;
-    struct Matrix *A = create_matrix(n, n);
-    struct Matrix *C = create_matrix(n, n);
+    struct Matrix *A,*C;
+    if (type==4) {
+        A = create_matrix_aligned(n, n);
+        C = create_matrix_aligned(n, n);
+    }else {
+        A = create_matrix(n, n);
+        C = create_matrix(n, n);
+    }
+
 
     for (size_t i = 0; i < outerCir; i++)
     {
@@ -403,9 +537,13 @@ long long test_outer(size_t n, size_t innerCir, size_t outerCir,int type)
         if (tp<res) res=tp;
 
     }
-    free_matrix(A);
-    free_matrix(C);
-
+    if (type==4) {
+        free_matrix_aligned(A);
+        free_matrix_aligned(C);
+    } else {
+        free_matrix(A);
+        free_matrix(C);
+    }
     return res;
 }
 
@@ -439,6 +577,12 @@ long long test_inner(size_t n, size_t innerCir, int type, const struct Matrix *A
                     start = get_time_ns();
                     matmul_tp(n, A, A, C);
                     end = get_time_ns();
+                    break;
+                case 4:
+                    start = get_time_ns();
+                    matmul_improved_aligned(n, A, A, C);
+                    end = get_time_ns();
+                    break;
                 default:
                     start = get_time_ns();
                     matmul_plain(n, A, A, C);

@@ -164,9 +164,9 @@ int verify_ooc_result(size_t N, const char *fileA, const char *fileC, const int 
         printf("N=%zu is too large to comfortably verify in main memory, skipping verification.\n", N);
         return 0;
     }
-    struct Matrix *mat_a_test = create_matrix(N, N);
-    struct Matrix *mat_c_test = create_matrix(N, N);
-    struct Matrix *mat_c_check = create_matrix(N, N);
+    struct Matrix *mat_a_test = create_matrix_aligned(N, N);
+    struct Matrix *mat_c_test = create_matrix_aligned(N, N);
+    struct Matrix *mat_c_check = create_matrix_aligned(N, N);
     randomize_matrix(mat_a_test);
 
     // 用 OpenBLAS 算出正确的标准答案，存放在 mat_c_check 里，不要去覆盖它

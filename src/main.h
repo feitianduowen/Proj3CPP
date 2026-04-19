@@ -41,12 +41,14 @@ int matmul_improved(size_t N, const struct Matrix *A, const struct Matrix *B, st
 int matmul_openblas(size_t N, const struct Matrix *A, const struct Matrix *B, struct Matrix const *C);
 int matmul_openblas_accumulate(size_t N, const struct Matrix *A, const struct Matrix *B, struct Matrix const*C);
 int matmul_tp(size_t N, const struct Matrix *A, const struct Matrix *B, struct Matrix const *C);
-
+int matmul_improved_aligned(size_t N, const struct Matrix *A, const struct Matrix *B, struct Matrix const *C);
 
 struct Matrix *create_matrix(size_t rows, size_t cols);
+struct Matrix *create_matrix_aligned(size_t rows, size_t cols);
 void randomize_matrix(struct Matrix const *mat);
 void clear_matrix(struct Matrix const *mat);
 void free_matrix(struct Matrix *mat);
+void free_matrix_aligned(struct Matrix *mat);
 int compare_matrices(const struct Matrix *mat1, const struct Matrix *mat2, float epsilon);
 
 long long test_outer(size_t n, size_t innerCir, size_t outerCir,int type);
@@ -60,5 +62,7 @@ void cblas_sgemm(const enum CBLAS_ORDER Order, const enum CBLAS_TRANSPOSE TransA
                  const int K, const float alpha, const float *A,
                  const int lda, const float *B, const int ldb,
                  const float beta, float *C, const int ldc);
+
+long long test_matmul_aligned(size_t n, size_t innerCir, size_t outerCir);
 
 #endif // MAIN_H
