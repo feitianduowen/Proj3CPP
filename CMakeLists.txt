@@ -1,9 +1,11 @@
 cmake_minimum_required(VERSION 3.10)
-project(CS209A_Proj3_Matmul C)
+project(CS209A_Proj3_Matmul C CXX)
 
-# 设置 C 标准
+# 设置 C/CXX 标准
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED TRUE)
+set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD_REQUIRED TRUE)
 
 # 全局编译优化选项 (包含 AVX 和 AVX2 指令集支持)
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O3 -mavx -mavx2")
@@ -46,11 +48,23 @@ target_link_libraries(test_matmul PRIVATE OpenMP::OpenMP_C ${OPENBLAS_LIB})
 # ---------------------------------------------------------
 # 2. 编译 temp.c 和 main.c 组成的 temp 测试程序
 # ---------------------------------------------------------
-add_executable(temp_matmul src/temp.c src/main.c)
-target_link_libraries(temp_matmul PRIVATE OpenMP::OpenMP_C ${OPENBLAS_LIB})
+#add_executable(temp_matmul src/temp.c src/main.c)
+#target_link_libraries(temp_matmul PRIVATE OpenMP::OpenMP_C ${OPENBLAS_LIB})
 
 # ---------------------------------------------------------
-# 3. 编译 ooc.c 和 main.c 组成的核外计算验证程序
+## 3. 编译 ooc.c 和 main.c 组成的核外计算验证程序
+## ---------------------------------------------------------
+#add_executable(ooc_matmul src/ooc.c src/main.c
+#        src/temp2.c
+#        src/temp2.h)
+#target_link_libraries(ooc_matmul PRIVATE OpenMP::OpenMP_C ${OPENBLAS_LIB})
+
 # ---------------------------------------------------------
-add_executable(ooc_matmul src/ooc.c src/main.c)
-target_link_libraries(ooc_matmul PRIVATE OpenMP::OpenMP_C ${OPENBLAS_LIB})
+# 4. 编译 CUDA/matmul.cu 并链接 OpenBLAS (使用外部命令编译)
+# 此处为了避开 MinGW 下 nvcc 找不到 cl.exe 的问题，将其转为通过 CMake 执行命令行
+# 或者您可以注释掉下面这段代码，直接在终端执行编译:
+# nvcc CUDA/matmul.cu -o cuda_matmul.exe -allow-unsupported-compiler -I./OpenBLAS -L./OpenBLAS -lopenblas
+# ---------------------------------------------------------
+# add_executable(cuda_matmul CUDA/matmul.cu)
+# set_target_properties(cuda_matmul PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
+# target_link_libraries(cuda_matmul PRIVATE OpenMP::OpenMP_C ${OPENBLAS_LIB})
