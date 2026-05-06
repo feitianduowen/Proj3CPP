@@ -215,7 +215,7 @@ for (int i = 0; i < N; i += 4)
 
 > ⚠⚠⚠但是在本方案中，计算$C_i$的双层嵌套循环for和for没有紧挨(**非完美嵌套**)，所以在Windows MinGw下collapse(2)失效，在WSL或者Linux下会报错，因为Linux系统上的GCC对此更严格。
 >
-> 因为 `taskwait` 被注释掉，主线程在分配完 P1~P7 的 `task` 后，**不会等待它们计算完成**，就会直接进入下面的 `parallel for` 去读取 P1~P7 的内存。此时 P1~P7 里面全是垃圾值或未计算完的数据（Race Condition）。但是因为顶层没有加`#pragma omp parallel`。在没有开启全局并行域的情况下，`#pragma omp task` 会退化（被单线程顺序或立即执行），恰好掩盖了这个并发 BUG。存在安全隐患。
+> 因为 `taskwait` 被注释掉，主线程在分配完 P1\~P7 的 `task` 后，**不会等待它们计算完成**，就会直接进入下面的 `parallel for` 去读取 P1\~P7 的内存。此时 P1\~P7 里面全是垃圾值或未计算完的数据（Race Condition）。但是因为顶层没有加`#pragma omp parallel`。在没有开启全局并行域的情况下，`#pragma omp task` 会退化（被单线程顺序或立即执行），恰好掩盖了这个并发 BUG。存在安全隐患。
 
 `shared`将N\A\B\C\BLOCK标记为共享变量，在内存中只有一份实体，所有线程可以同时读写它们。
 
