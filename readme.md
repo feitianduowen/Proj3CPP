@@ -87,7 +87,7 @@ nvcc matmul.cu -o matmul.exe -Xcompiler "/openmp /arch:AVX2 /utf-8"
 
 现代CPU具有动态睿频(Turbo Boost)和**温度墙**限制，在连续进行多次大矩阵查时，CPU可能会因为过热而降低频率，导致后续测试的性能下降。为了减轻这个问题，我使用`windows.h`中的`Sleep`，如果是Linux则使用`#include <unistd.h> sleep(1);`，在每次测试之间加入了适当的休息时间（如10秒），以允许CPU降温并恢复正常频率。此外，在测试过程中，我使用轻量的软件**Core Temp 1.20** 监控了CPU温度，确保它不会过高。并且在每次运行代码前后间隔较长时间，软件界面如图：
 
-<img src="..\important\coreTemp.png" style="zoom:50%;" />
+<img src="image\coreTemp.png" style="zoom:50%;" />
 
 ## 3. 优化过程
 
@@ -107,7 +107,7 @@ nvcc matmul.cu -o matmul.exe -Xcompiler "/openmp /arch:AVX2 /utf-8"
 
 #### 3.2.2 结果分析
 
-<img src="..\important\ikj_barplot.png" style="zoom: 40%;" />
+<img src="image\ikj_barplot.png" style="zoom: 40%;" />
 
 发现ikj的循环优化对规模大的矩阵提升更显著, 符合理论分析中的预期。
 
@@ -177,7 +177,7 @@ int matmul_strassen(size_t N, const Matrix *A, const Matrix *B, Matrix const *C)
 
 #### 3.3.3 结果分析
 
-<img src="..\important\strassen.png" style="zoom: 20%;" />
+<img src="image\strassen.png" style="zoom: 20%;" />
 
 根据上图，Strassen算法性能随着矩阵规模的增大而增强，在N=8192时，Strassen算法的性能已经远远优于朴素矩阵乘法，远比ikj循环优化的版本还要快。符合理论的预期。
 
@@ -241,9 +241,9 @@ for (int i = 0; i < N; i += 4)
 
 #### 3.4.3 结果分析
 
-<img src="..\important\improved2.png" alt="3.4.2" style="zoom: 20%;" />
+<img src="image\improved2.png" alt="3.4.2" style="zoom: 20%;" />
 
-<img src="..\important\improved1.png" alt="3.4.2" style="zoom: 20%;" /><img src="..\important\improved3.png" alt="3.4.2" style="zoom: 50%;" /><img src="..\important\allcompare.png" alt="3.4.2" style="zoom: 50%;" />
+<img src="image\improved1.png" alt="3.4.2" style="zoom: 20%;" /><img src="image\improved3.png" alt="3.4.2" style="zoom: 50%;" /><img src="image\allcompare.png" alt="3.4.2" style="zoom: 50%;" />
 
 - `matmul_improved2`和`matmul_improved3`稳定地优于`matmul_strassen`
 - 在规模更大的矩阵上，`matmul_improved2`的耗时远小于`matmul_improved`
@@ -280,7 +280,7 @@ CPU 的 L1 高速缓存是按 Cache Line（通常为 64 字节）读取内存的
 
 #### 3.5.3 结果分析与原因
 
-<img src="..\important\aligned1.png" alt="3.5.3" style="zoom: 20%;" />
+<img src="image\aligned1.png" alt="3.5.3" style="zoom: 20%;" />
 
 在规模小于128、未使用分块缓存的情况下，内存对齐的性能提升非常显著，甚至在N=16时达到了10倍以上的加速比。这是因为对于小规模矩阵，内存访问模式更频繁地触发了非对齐访问的性能惩罚，而内存对齐有效地消除了这些惩罚。
 然而，在规模较大的情况下，性能提升的幅度明显减小，甚至在某些规模（如N=4096）下，内存对齐的性能反而略逊于非对齐。这可能是因为在大规模矩阵乘法中，计算的瓶颈更多地来自于计算资源的限制和内存带宽的限制，而不是单纯的内存访问模式。因此，内存对齐在这种情况下对整体性能的影响较小。
@@ -333,7 +333,7 @@ OOC 的核心思想是将矩阵分块存储在磁盘上，每次只加载一个�
 
 因为从N=1024到65536的数据样本差了1e4数量级，如果直接使用耗时作为纵坐标绘图将无法清晰对比数据与观察趋势，所以我使用了对数坐标（log scale）（柱状）和**GFLOPS** ($2*N^3$/time_ns)（折线） 来绘制性能图表。通过对数和归一化坐标，我们可以更直观地观察不同块大小和矩阵规模下的性能差异。
 
-<img src="..\important\ooc_barplot.png" alt="OOC Performance" style="zoom: 20%;" />
+<img src="image\ooc_barplot.png" alt="OOC Performance" style="zoom: 20%;" />
 
 观察上图，我们可以得出以下结论：
 
@@ -361,7 +361,7 @@ GPU上的流多处理器（SM）以 warp 为单位调度线程。当一个 warp 
 
 当同一 warp 内的**相邻**线程访问**连续的全局内存地址**时（且满足对齐要求），GPU 可以将这些请求合并为一次或几次大块传输，从而充分利用显存带宽。如果访问模式是乱序或跨步，带宽利用率将急剧下降。
 
-<img src="..\important\GPUmem.png" style="zoom:60%;" />
+<img src="image\GPUmem.png" style="zoom:60%;" />
 
 #### 3.7.2 代码实现
 
@@ -385,7 +385,7 @@ GPU上的流多处理器（SM）以 warp 为单位调度线程。当一个 warp 
 
 ####  3.7.3 结果分析
 
-<img src="..\important\CUDA.png" alt="image-20260427161707309" style="zoom:40%;" />
+<img src="image\CUDA.png" alt="image-20260427161707309" style="zoom:40%;" />
 
 
 多次运行发现结果较为稳定。两种GPU的方法的性能总体远优于CPU的`IMPROVED3`。且发现GPUOpt方法很接近OPENBLAS的耗时。且GPUOpt方法稳定地优于GPU NAIVE。
@@ -443,7 +443,7 @@ Level-3 BLAS(矩阵-矩阵操作)的BLIS框架还针对各种CPU（涵盖AMD和I
 
 虽然我没有看太懂论文中的模型图，但是大意是在不同的微内核循环层中，分别分块后的$\hat{B_i}$打包驻留在L3缓存中，把$\hat{A_i}$打包并驻留在L2中。论文中提到有文献证明了该分块方案能够最优地分摊上一层与下一层内存间的<u>数据移动开销</u>。尽可能让内存中连续的数据用于<u>连续的操作</u>，高效地将数据移动到寄存器[^5]。下图是论文给出的模型图所示：
 
-<img src="..\important\CacheModel.png" style="zoom:50%;" />
+<img src="image\CacheModel.png" style="zoom:50%;" />
 
 ### 4.2  汇编级优化
 
@@ -498,7 +498,7 @@ ABI是应用程序二进制接口。在Windows x64系统下 WINDOWS_ABI被定义
 
 ### 5.1 结果分析
 
- <img src="..\important\errLine.png" alt="image-20260427161707309" style="zoom:50%;" />
+ <img src="image\errLine.png" alt="image-20260427161707309" style="zoom:50%;" />
 
 该部分以mat_plain的计算结果作为基准，统计100次**N=1024**的矩阵乘法的误差。对每个元素的误差绝对值细分了多个区间并统计个数，如$0, (0,1e-5f), [1e-5f,2e-5f), ... ,  [8e-4f,9e-4f), [9e-4f,+\infty)$.
 
@@ -538,7 +538,7 @@ ABI是应用程序二进制接口。在Windows x64系统下 WINDOWS_ABI被定义
 
 wsl上运行的结果普遍地比MinGw运行结果慢。
 
-<img src="..\important\wsl1.png" alt="wsl1" style="zoom:50%;" />
+<img src="image\wsl1.png" alt="wsl1" style="zoom:50%;" />
 
 #### 6.1.2 Valgrind
 
@@ -556,9 +556,9 @@ wsl上运行的结果普遍地比MinGw运行结果慢。
 
 使用perf分析器对IMPROVED3 N=8192的矩阵计算进行了探究。本来直接使用我原来的封装的测试函数`check_single`，发现绝大多数 CPU 时间都耗在了线程管理上，而不是计算。导致计算函数 `matmul_improved3` 和 `matmul_improved3_leaf` 仅占 `< 1%`，几乎可以忽略。因此我在`int main()`调用`test_outer`。虽然后面尝试直接在`main`方法里调用三次`matmul_improved3`，情况变得更差了。下面是调用树和火焰图的部分截图：
 
-<img src="..\important\wsl2.png" alt="image-20260505173151852" style="zoom:50%;" />
+<img src="image\wsl2.png" alt="image-20260505173151852" style="zoom:50%;" />
 
-<img src="..\important\wslPerf2.png" style="zoom:50%;" />
+<img src="image\wslPerf2.png" style="zoom:50%;" />
 
 - `improved3_seq` 占10.4%，说明 Strassen 递归和矩阵加减/乘法占用了绝大部分 CPU 时
 - `improved3_leaf` 占 8.1%，是底层 AVX 密集计算部分。
@@ -571,7 +571,7 @@ macOS 自带的 Accelerate 库，本身包含高度优化的 `cblas_sgemm`。因
 
 下面是运行结果:
 
-<img src="..\important\mac.png" style="zoom:50%;" /><img src="..\important\mac2.png" style="zoom:50%;" />
+<img src="image\mac.png" style="zoom:50%;" /><img src="image\mac2.png" style="zoom:50%;" />
 
 - Mac 上的 OpenBLAS 在小矩阵上大幅领先，大矩阵下OpenBLAS 在Mac上仍然保持优势
 - 手写的 IMPROVED3 在 Mac 上性能不佳，因为未针对NEON进行充分优化
