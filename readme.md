@@ -240,8 +240,9 @@ for (int i = 0; i < N; i += 4)
 #### 3.4.3 结果分析
 
 <img src="image\improved2.png" alt="3.4.2" style="zoom: 20%;" />
-
-<img src="image\improved1.png" alt="3.4.2" style="zoom: 20%;" /><img src="image\improved3.png" alt="3.4.2" style="zoom: 50%;" /><img src="image\allcompare.png" alt="3.4.2" style="zoom: 50%;" />
+<img src="image\improved1.png" alt="3.4.2" style="zoom: 20%;" />
+<img src="image\improved3.png" alt="3.4.2" style="zoom: 50%;" />
+<img src="image\allCompare.png" alt="3.4.2" style="zoom: 50%;" />
 
 - `matmul_improved2`和`matmul_improved3`稳定地优于`matmul_strassen`
 - 在规模更大的矩阵上，`matmul_improved2`的耗时远小于`matmul_improved`
