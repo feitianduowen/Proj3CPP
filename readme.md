@@ -622,3 +622,22 @@ CPU的SIMD宽度决定了FLOP峰值
 [^3]: https://github.com/Maystern/SUSTech_CS205_Cpp_Projects/blob/main/Project04_matrix-multiplication-in-C/doc/report.md
 [^4]: https://arxiv.org/pdf/1609.00076
 [^5]: https://www.cs.utexas.edu/~flame/pubs/GotoTOMS_final.pdf
+
+
+
+
+
+
+ps: 
+
+2026/5/14/17:36
+
+1. 6.1.3 Perf的 `libc.so.6‘clone3`是 Linux/glibc 创建线程的底层入口。占比大的原因是：程序的 OpenMP 并行区域、线程创建、线程唤醒、同步或线程池管理开销较大。
+
+   **应同时查看 `Self` 和 `Children` 两列**。如果 `clone3` 的 `Self` 很低、`Children` 很高，它只是调用栈祖先；如果 `Self` 也高，才说明线程创建/系统调用本身频繁发生，可能是并行区域过碎、反复进入 OpenMP、测试函数封装导致线程调度开销掩盖了矩阵计算。
+
+2. “**3.5.3 结果分析与原因**” 的描述“*<u>小规模矩阵更频繁触发非对齐惩罚</u>*”并不准确
+
+   非对齐惩罚不是因为矩阵小就更频繁触发。对于小规模矩阵，矩阵乘法本身计算量很小，计时结果更容易被函数调用、计时开销、缓存状态、编译器生成指令差异和内存分配地址差异放大；因此观察到的巨大加速不一定完全来自内存对齐本身。
+
+   在现代 x86 CPU 上，未对齐 load 并不必然非常慢；只有跨 cache line、跨 page 或形成 split load/store 时，惩罚才更明显。
