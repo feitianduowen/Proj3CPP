@@ -615,15 +615,6 @@ CPU的SIMD宽度决定了FLOP峰值
 
 更深入地探究project3所学的知识，并应用到以后的学习中，比如使用CUDA学习深度学习卷积、矩阵乘。
 
-## 8. 参考文献
-
-[^1]: https://scispace.com/pdf/exploiting-superword-level-parallelism-with-multimedia-1ihagkottn.pdf
-[^2]: https://scipedia.bohrium.com/sciencepedia/feynman/keyword/superword_level_parallelism
-[^3]: https://github.com/Maystern/SUSTech_CS205_Cpp_Projects/blob/main/Project04_matrix-multiplication-in-C/doc/report.md
-[^4]: https://arxiv.org/pdf/1609.00076
-[^5]: https://www.cs.utexas.edu/~flame/pubs/GotoTOMS_final.pdf
-
-
 
 
 
@@ -641,3 +632,11 @@ ps:
    非对齐惩罚不是因为矩阵小就更频繁触发。对于小规模矩阵，矩阵乘法本身计算量很小，计时结果更容易被函数调用、计时开销、缓存状态、编译器生成指令差异和内存分配地址差异放大；因此观察到的巨大加速不一定完全来自内存对齐本身。
 
    在现代 x86 CPU 上，未对齐 load 并不必然非常慢；只有跨 cache line、跨 page 或形成 split load/store 时，惩罚才更明显。
+
+## 8. 参考文献
+
+[^1]: https://scispace.com/pdf/exploiting-superword-level-parallelism-with-multimedia-1ihagkottn.pdf
+[^2]: https://scipedia.bohrium.com/sciencepedia/feynman/keyword/superword_level_parallelism
+[^3]: https://github.com/Maystern/SUSTech_CS205_Cpp_Projects/blob/main/Project04_matrix-multiplication-in-C/doc/report.md
+[^4]: https://arxiv.org/pdf/1609.00076
+[^5]: https://www.cs.utexas.edu/~flame/pubs/GotoTOMS_final.pdf
